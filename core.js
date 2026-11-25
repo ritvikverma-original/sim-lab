@@ -627,7 +627,7 @@
     if (App.connecting) body = '<div class="empty"><p>Checking your sign-in…</p></div>';
     else if (App.sbDown) body = UI.sheet('Sign in', null, `<p class="case">Sign-in is unavailable right now. Try again in a minute, or continue on this device; your runs will move to your account the next time you sign in.</p><div class="actions">${UI.btn('Try again', 'sb-retry', 'btn-primary')}${UI.btn('Continue on this device', 'sb-bypass', 'btn-ghost')}</div>`);
     else body = UI.sheet('Sign in', 'Sign in to start practising', `<p class="case">Your runs, scores and drafts save to your account, so you can pick up on any device. Sign in with Google, or enter your email for a one-tap sign-in link.</p>${signInForm()}`);
-    return topBar('<span class="brand">B-School Sim Lab</span>', true) + `<main class="main"><section class="hero"><span class="eyebrow">Welcome</span><h1>Practise the <span class="hl">simulations</span> top MBA programmes run</h1></section>${body}</main>`;
+    return topBar('<span class="brand">B-School Sim Lab</span>', true) + `<main class="main"><section class="hero"><span class="eyebrow">Welcome</span><h1>Practise the <span class="hl">simulations</span> top MBA programmes run</h1></section>${body}<p class="foot"><a href="privacy.html">Privacy policy</a></p></main>`;
   }
   function modeSwitch() {
     if (!App.isAdmin) return '';
