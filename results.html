@@ -29,6 +29,7 @@ button.ghost{background:transparent;color:var(--pen);border:1px solid var(--rule
 .err{color:var(--bad)}
 tr.sel td{background:color-mix(in srgb,var(--pen) 10%,transparent)}
 tbody tr[data-u]{cursor:pointer}
+.mode-sw{display:inline-flex;border:1px solid var(--rule);border-radius:999px;padding:2px;font-size:13px;font-weight:600}.mode-o{padding:4px 12px;border-radius:999px;color:var(--ink);text-decoration:none}.mode-o.on{background:var(--ink);color:var(--bg)}
 </style>
 </head>
 <body>
@@ -64,7 +65,7 @@ tbody tr[data-u]{cursor:pointer}
     if (loading) return; loading = true;
     const { data: adm } = await client.from('simlab_admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
     if (!adm) {
-      show(`<div class="card"><p>Signed in as ${esc(session.user.email)}, which is not an owner account.</p><p class="mute">Add it to the simlab_admins table (see supabase/schema.sql), then reload.</p><button class="ghost" id="out">Sign out</button></div>`);
+      show(`<div class="card"><p>Signed in as ${esc(session.user.email)}, which is not an owner account.</p><p class="mute">Add it to the simlab_admins table (see supabase/schema.sql), then reload. <a href="./">Back to the app</a></p><button class="ghost" id="out">Sign out</button></div>`);
       document.getElementById('out').onclick = () => client.auth.signOut().then(() => location.reload());
       return;
     }
@@ -94,7 +95,7 @@ tbody tr[data-u]{cursor:pointer}
     const byM = {};
     done.forEach(r => { (byM[r.module] = byM[r.module] || []).push(r.score); });
     const name = u => { const x = users.find(v => v.id === u); return x ? (x.name || x.email) : u.slice(0, 8); };
-    let h = `<div class="row" style="margin-top:8px"><span class="mute">Signed in as ${esc(session.user.email)}</span><span style="flex:1"></span><button class="ghost" id="csv">Download runs (CSV)</button><button class="ghost" id="out">Sign out</button></div>`;
+    let h = `<div class="row" style="margin-top:8px"><span class="mode-sw" role="group" aria-label="Mode"><a class="mode-o" href="./">User</a><span class="mode-o on" aria-current="true">Admin</span></span><span class="mute">Signed in as ${esc(session.user.email)}</span><span style="flex:1"></span><button class="ghost" id="csv">Download runs (CSV)</button><button class="ghost" id="out">Sign out</button></div>`;
     h += `<div class="kpis"><div class="kpi"><span class="mute">Players</span><b>${pick === 'all' ? users.length : 1}</b></div><div class="kpi"><span class="mute">Runs</span><b>${list.length}</b></div><div class="kpi"><span class="mute">Completed</span><b>${done.length}</b></div><div class="kpi"><span class="mute">Average score</span><b>${sc.length ? avg(sc) : '–'}</b></div></div>`;
     h += `<div class="card"><h2>Players</h2><p class="mute">Click a player to filter. ${pick !== 'all' ? '<button class="ghost" id="clr">Show everyone</button>' : ''}</p><div class="tw"><table><thead><tr><th>Player</th><th>Email</th><th class="n">Runs</th><th class="n">Completed</th><th class="n">Avg score</th><th class="n">Best</th><th>Last active</th></tr></thead><tbody>${users.map(u => `<tr data-u="${esc(u.id)}" class="${u.id === pick ? 'sel' : ''}"><td>${esc(u.name || '–')}</td><td>${esc(u.email)}</td><td class="n">${u.runs}</td><td class="n">${u.done}</td><td class="n">${u.avg == null ? '–' : u.avg}</td><td class="n">${u.best == null ? '–' : u.best}</td><td>${when(u.last)}</td></tr>`).join('') || '<tr><td colspan="7" class="mute">No players yet.</td></tr>'}</tbody></table></div></div>`;
     h += `<div class="card"><h2>By simulation</h2><div class="tw"><table><thead><tr><th>Simulation</th><th class="n">Completed runs</th><th class="n">Average</th><th class="n">Best</th></tr></thead><tbody>${Object.keys(byM).sort((a, b) => byM[b].length - byM[a].length).map(m => { const s = byM[m].filter(x => typeof x === 'number'); return `<tr><td>${esc(m)}</td><td class="n">${byM[m].length}</td><td class="n">${s.length ? avg(s) : '–'}</td><td class="n">${s.length ? Math.max(...s) : '–'}</td></tr>`; }).join('') || '<tr><td colspan="4" class="mute">No completed runs yet.</td></tr>'}</tbody></table></div></div>`;
