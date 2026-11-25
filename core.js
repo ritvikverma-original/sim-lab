@@ -618,14 +618,15 @@
     return !!(SB && SB.requireSignIn && !hasClaude && App.mode !== 'cloud' && !App.sbBypass);
   }
   function signInForm() {
-    const SB = window.SimLabCloud;
-    return `<div class="sb-form"><label class="cap" for="sb-email">Email</label><input id="sb-email" class="sb-in" type="email" autocomplete="email" placeholder="you@example.com"><div class="actions">${UI.btn('Email me a sign-in link', 'sb-email', 'btn-primary')}${SB && SB.google ? UI.btn('Continue with Google', 'sb-google', 'btn-ghost') : ''}</div></div>`;
+    const SB = window.SimLabCloud, g = SB && SB.google;
+    const google = g ? `<div class="actions">${UI.btn('Continue with Google', 'sb-google', 'btn-primary')}</div><p class="cap sb-or">or get a sign-in link by email</p>` : '';
+    return `<div class="sb-form">${google}<label class="cap" for="sb-email">Email</label><input id="sb-email" class="sb-in" type="email" autocomplete="email" placeholder="you@example.com"><div class="actions">${UI.btn('Email me a sign-in link', 'sb-email', g ? 'btn-ghost' : 'btn-primary')}</div></div>`;
   }
   function viewSignIn() {
     let body;
     if (App.connecting) body = '<div class="empty"><p>Checking your sign-in…</p></div>';
     else if (App.sbDown) body = UI.sheet('Sign in', null, `<p class="case">Sign-in is unavailable right now. Try again in a minute, or continue on this device; your runs will move to your account the next time you sign in.</p><div class="actions">${UI.btn('Try again', 'sb-retry', 'btn-primary')}${UI.btn('Continue on this device', 'sb-bypass', 'btn-ghost')}</div>`);
-    else body = UI.sheet('Sign in', 'Sign in to start practising', `<p class="case">Your runs, scores and drafts save to your account, so you can pick up on any device. Enter your email and we will send you a one-tap sign-in link.</p>${signInForm()}`);
+    else body = UI.sheet('Sign in', 'Sign in to start practising', `<p class="case">Your runs, scores and drafts save to your account, so you can pick up on any device. Sign in with Google, or enter your email for a one-tap sign-in link.</p>${signInForm()}`);
     return topBar('<span class="brand">B-School Sim Lab</span>', true) + `<main class="main"><section class="hero"><span class="eyebrow">Welcome</span><h1>Practise the <span class="hl">simulations</span> top MBA programmes run</h1></section>${body}</main>`;
   }
   function modeSwitch() {
@@ -758,7 +759,7 @@
         const inp = document.getElementById('sb-email'), email = inp ? inp.value.trim() : '';
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Enter a valid email address.'); return; }
         el.disabled = true;
-        window.SimLabCloud.signInEmail(email).then(() => toast('Check your inbox for a sign-in link.'), () => toast('Could not send the link. Try again shortly.')).finally(() => { el.disabled = false; });
+        window.SimLabCloud.signInEmail(email).then(() => toast('Check your inbox for a sign-in link.'), e => toast(e && e.code === 'rate_limited' ? (window.SimLabCloud.google ? 'Too many sign-in emails right now. Use Continue with Google, or try email again in an hour.' : 'Too many sign-in emails right now. Try again in an hour.') : 'Could not send the link. Try again shortly.')).finally(() => { el.disabled = false; });
         return;
       }
       case 'sb-retry': location.reload(); return;
