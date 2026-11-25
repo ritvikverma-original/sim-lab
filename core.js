@@ -340,7 +340,7 @@
     dialog: null, confirm: null, filter: 'all', histCat: 'all', catF: { cat: 'all', fmt: 'all', lvl: 'all' }, banner: null, toastTimer: null,
     localCount: 0, toastMsg: null,
     /* Platform layer (platform.js) plugs in here; core falls back to its own views if it is missing or fails. */
-    views: {}, actions: {}, hooks: {}, navItems: null, prefs: {},
+    views: {}, actions: {}, hooks: {}, navItems: null, prefs: {}, provider: null,
     register(def) { this.modules[def.id] = def; if (this.order.indexOf(def.id) < 0) this.order.push(def.id); },
     ctx: null
   };
@@ -370,9 +370,16 @@
     const hasClaude = window.claude && typeof window.claude.use === 'function';
     App.runs = Local.runs();
     App.localCount = Object.keys(App.runs).length;
-    if (!hasClaude) { App.connecting = false; render(); return; }
+    const SB = !hasClaude && window.SimLabCloud && window.SimLabCloud.configured ? window.SimLabCloud : null;
+    if (!hasClaude && !SB) { App.connecting = false; render(); return; }
     let user = null, db = null;
-    try { [user, db] = await Promise.all([window.claude.use('user'), window.claude.use('db')]); } catch (e) { /* fall back to device storage */ }
+    if (hasClaude) {
+      App.provider = 'claude';
+      try { [user, db] = await Promise.all([window.claude.use('user'), window.claude.use('db')]); } catch (e) { /* fall back to device storage */ }
+    } else {
+      App.provider = 'web';
+      try { const p = await SB.start(); if (p) { user = p.user; db = p.db; } } catch (e) { App.banner = 'Sign-in is unavailable right now, so progress is saved on this device.'; }
+    }
     if (user) {
       try { const me = await user.me(); App.me = { id: me.id, name: me.name || '', email: me.email || null, avatar: me.avatarUrl || null, color: me.color || null }; } catch (e) { /* no identity */ }
     }
@@ -504,6 +511,7 @@
   function bannerHtml() {
     let b = '';
     if (App.banner) b += `<div class="banner">${esc(App.banner)} <button type="button" class="link" data-act="dismiss-banner">Dismiss</button></div>`;
+    if (App.provider === 'web' && App.mode !== 'cloud' && !App.connecting && !App.sbHide && App.view !== 'account') b += `<div class="banner">Sign in to keep your progress on every device. <button type="button" class="link" data-act="nav" data-view="account">Sign in</button> <button type="button" class="link" data-act="sb-hide">Not now</button></div>`;
     if (App.mode === 'cloud' && App.localCount > 0) b += `<div class="banner">${App.localCount} run${App.localCount === 1 ? ' is' : 's are'} saved only on this device. <button type="button" class="link" data-act="import-local">Move to my account</button></div>`;
     return b;
   }
@@ -604,11 +612,19 @@
     h += UI.sheet(null, `${runs.length} run${runs.length === 1 ? '' : 's'}`, runs.length ? `<div class="runs">${runs.map(runRow).join('')}</div>` : UI.empty('No runs yet. Start one from Simulations.', UI.btn('Browse simulations', 'nav', 'btn-primary', 'data-view="catalog"')));
     return h;
   }
+  function accountNote(cloud) {
+    const SB = window.SimLabCloud, web = App.provider === 'web' && SB;
+    if (cloud && App.provider === 'web') return `<p class="case">You are signed in to your Sim Lab account. Every run and draft saves to your account, so you can sign in on any device and pick up where you left off. Your scores and grades are visible to the site owner; your answers and drafts are not.</p><div class="actions">${UI.btn('Sign out', 'sb-signout', 'btn-ghost')}</div>`;
+    if (cloud) return '<p class="case">You are signed in through your Claude account, with the same Google or email sign-in you use for Claude. Every run, draft and score saves to private storage that only you can read, and you can resume on any device where you open this page.</p>';
+    if (App.connecting) return '<p class="case">Connecting to your account…</p>';
+    if (web) return `<p class="case">You are playing as a guest, so runs save in this browser only. Sign in to keep your progress on every device. Runs already on this device can be moved to your account after you sign in.</p><div class="sb-form"><label class="cap" for="sb-email">Email</label><input id="sb-email" class="sb-in" type="email" autocomplete="email" placeholder="you@example.com"><div class="actions">${UI.btn('Email me a sign-in link', 'sb-email', 'btn-primary')}${SB.google ? UI.btn('Continue with Google', 'sb-google', 'btn-ghost') : ''}</div></div>`;
+    return '<p class="case">This view has no account connection, so runs save in this browser only. Open the page from your Claude account to sync across devices.</p>';
+  }
   function viewAccount() {
     const me = App.me, cloud = App.mode === 'cloud';
     const all = runsArr();
     let h = `<section class="hero"><span class="eyebrow">Account</span><h1>Your profile</h1></section>`;
-    h += UI.sheet('Signed in', null, `<div class="ident">${avatar(56)}<div class="ident-t"><span class="h2">${esc(me.name || (cloud ? 'Signed in' : 'Guest'))}</span>${me.email ? `<span class="num ident-e">${esc(me.email)}</span>` : ''}</div></div><p class="case">${cloud ? 'You are signed in through your Claude account, with the same Google or email sign-in you use for Claude. Every run, draft and score saves to private storage that only you can read, and you can resume on any device where you open this page.' : App.connecting ? 'Connecting to your account…' : 'This view has no account connection, so runs save in this browser only. Open the page from your Claude account to sync across devices.'}</p>${UI.kpis([
+    h += UI.sheet('Signed in', null, `<div class="ident">${avatar(56)}<div class="ident-t"><span class="h2">${esc(me.name || (cloud ? 'Signed in' : 'Guest'))}</span>${me.email ? `<span class="num ident-e">${esc(me.email)}</span>` : ''}</div></div>${accountNote(cloud)}${UI.kpis([
       { k: 'Storage', v: cloud ? 'Account' : 'This device' }, { k: 'Runs saved', v: String(all.length) }, { k: 'Completed', v: String(all.filter(r => r.status === 'done').length) }, { k: 'Last activity', v: all.length ? N.ago(all[0].updatedAt) : '–' }
     ])}`);
     h += UI.sheet('Data', 'Your records', `<p class="case">Each run stores the market seed and every decision you made, so the platform can rebuild any year of any run exactly as you played it.</p><div class="actions">${UI.btn('Download history (CSV)', 'export-csv')}${cloud && App.localCount ? UI.btn(`Move ${App.localCount} device run${App.localCount === 1 ? '' : 's'} to account`, 'import-local') : ''}</div>`);
@@ -717,6 +733,16 @@
       case 'nav': App.view = el.dataset.view; App.cur = null; App.dialog = null; render(true); return;
       case 'dismiss-banner': App.banner = null; render(); return;
       case 'import-local': importLocal(); return;
+      case 'sb-email': {
+        const inp = document.getElementById('sb-email'), email = inp ? inp.value.trim() : '';
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast('Enter a valid email address.'); return; }
+        el.disabled = true;
+        window.SimLabCloud.signInEmail(email).then(() => toast('Check your inbox for a sign-in link.'), () => toast('Could not send the link. Try again shortly.')).finally(() => { el.disabled = false; });
+        return;
+      }
+      case 'sb-hide': App.sbHide = true; render(); return;
+      case 'sb-google': window.SimLabCloud.signInGoogle().catch(() => toast('Google sign-in is unavailable right now.')); return;
+      case 'sb-signout': window.SimLabCloud.signOut().finally(() => location.reload()); return;
       case 'export-csv': exportCsv(); return;
       case 'filter': App.filter = el.dataset.value; render(); return;
       case 'hist-cat': App.histCat = el.dataset.value; App.filter = 'all'; render(); return;
