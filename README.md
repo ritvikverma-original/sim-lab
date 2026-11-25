@@ -18,3 +18,5 @@ The claude.ai copy signs people in with their Claude account. The web copies (Gi
 6. Sign in once on the site, then make yourself an owner in SQL Editor:
    `insert into public.simlab_admins (user_id) select id from auth.users where email = 'you@example.com';`
 7. Open `/results.html` to see everyone's scores. Answers and drafts stay private to each player.
+
+Sign-in is required on the website while `requireSignIn` is `true` in `cloud-config.js`. Accounts listed in `simlab_admins` see a User / Admin switch in the top bar; Admin opens `results.html`. If Supabase can't be reached, visitors may continue on their device until it is back.

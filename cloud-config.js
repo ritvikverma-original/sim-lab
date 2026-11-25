@@ -5,5 +5,6 @@
 window.SIMLAB_SUPABASE = {
   url: 'https://qkkqfhudczfmvdwnemuh.supabase.co',
   anonKey: 'sb_publishable_nXo974qBq-ASCezw1JbInw_1E1Q5Dxb',  // publishable (public) key
+  requireSignIn: true,  // website visitors must sign in before using the app
   google: false     // set to true once Google sign-in is switched on in Supabase (Authentication > Providers)
 };

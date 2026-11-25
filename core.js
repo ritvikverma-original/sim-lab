@@ -340,7 +340,7 @@
     dialog: null, confirm: null, filter: 'all', histCat: 'all', catF: { cat: 'all', fmt: 'all', lvl: 'all' }, banner: null, toastTimer: null,
     localCount: 0, toastMsg: null,
     /* Platform layer (platform.js) plugs in here; core falls back to its own views if it is missing or fails. */
-    views: {}, actions: {}, hooks: {}, navItems: null, prefs: {}, provider: null,
+    views: {}, actions: {}, hooks: {}, navItems: null, prefs: {}, provider: null, isAdmin: false, sbDown: false, sbBypass: false,
     register(def) { this.modules[def.id] = def; if (this.order.indexOf(def.id) < 0) this.order.push(def.id); },
     ctx: null
   };
@@ -378,7 +378,7 @@
       try { [user, db] = await Promise.all([window.claude.use('user'), window.claude.use('db')]); } catch (e) { /* fall back to device storage */ }
     } else {
       App.provider = 'web';
-      try { const p = await SB.start(); if (p) { user = p.user; db = p.db; } } catch (e) { App.banner = 'Sign-in is unavailable right now, so progress is saved on this device.'; }
+      try { const p = await SB.start(); if (p) { user = p.user; db = p.db; App.isAdmin = !!p.isAdmin; } } catch (e) { App.sbDown = true; App.banner = 'Sign-in is unavailable right now, so progress is saved on this device.'; }
     }
     if (user) {
       try { const me = await user.me(); App.me = { id: me.id, name: me.name || '', email: me.email || null, avatar: me.avatarUrl || null, color: me.color || null }; } catch (e) { /* no identity */ }
@@ -505,7 +505,7 @@
   }
   function topBar(inner, wide, cls) { return `<div class="bar${cls ? ' ' + cls : ''}"><div class="bar-in${wide ? ' wide' : ''}">${inner}</div></div>`; }
   function shellTop(active) {
-    return topBar(`<button type="button" class="brand" data-act="nav" data-view="home">B-School Sim Lab</button><span class="bar-sp"></span>${syncChip()}<button type="button" class="me-btn" data-act="nav" data-view="account" aria-label="Account">${avatar(30)}</button>`, true) +
+    return topBar(`<button type="button" class="brand" data-act="nav" data-view="home">B-School Sim Lab</button><span class="bar-sp"></span>${modeSwitch()}${syncChip()}<button type="button" class="me-btn" data-act="nav" data-view="account" aria-label="Account">${avatar(30)}</button>`, true) +
       `<div class="navwrap"><div class="nav-in wide">${nav(active)}</div></div>`;
   }
   function bannerHtml() {
@@ -612,12 +612,32 @@
     h += UI.sheet(null, `${runs.length} run${runs.length === 1 ? '' : 's'}`, runs.length ? `<div class="runs">${runs.map(runRow).join('')}</div>` : UI.empty('No runs yet. Start one from Simulations.', UI.btn('Browse simulations', 'nav', 'btn-primary', 'data-view="catalog"')));
     return h;
   }
+  /* Website copies can require sign-in before anything else shows (cloud-config.js: requireSignIn). */
+  function needsSignIn() {
+    const SB = window.SimLabCloud, hasClaude = window.claude && typeof window.claude.use === 'function';
+    return !!(SB && SB.requireSignIn && !hasClaude && App.mode !== 'cloud' && !App.sbBypass);
+  }
+  function signInForm() {
+    const SB = window.SimLabCloud;
+    return `<div class="sb-form"><label class="cap" for="sb-email">Email</label><input id="sb-email" class="sb-in" type="email" autocomplete="email" placeholder="you@example.com"><div class="actions">${UI.btn('Email me a sign-in link', 'sb-email', 'btn-primary')}${SB && SB.google ? UI.btn('Continue with Google', 'sb-google', 'btn-ghost') : ''}</div></div>`;
+  }
+  function viewSignIn() {
+    let body;
+    if (App.connecting) body = '<div class="empty"><p>Checking your sign-in…</p></div>';
+    else if (App.sbDown) body = UI.sheet('Sign in', null, `<p class="case">Sign-in is unavailable right now. Try again in a minute, or continue on this device; your runs will move to your account the next time you sign in.</p><div class="actions">${UI.btn('Try again', 'sb-retry', 'btn-primary')}${UI.btn('Continue on this device', 'sb-bypass', 'btn-ghost')}</div>`);
+    else body = UI.sheet('Sign in', 'Sign in to start practising', `<p class="case">Your runs, scores and drafts save to your account, so you can pick up on any device. Enter your email and we will send you a one-tap sign-in link.</p>${signInForm()}`);
+    return topBar('<span class="brand">B-School Sim Lab</span>', true) + `<main class="main"><section class="hero"><span class="eyebrow">Welcome</span><h1>Practise the <span class="hl">simulations</span> top MBA programmes run</h1></section>${body}</main>`;
+  }
+  function modeSwitch() {
+    if (!App.isAdmin) return '';
+    return `<span class="mode-sw" role="group" aria-label="Mode"><span class="mode-o on" aria-current="true">User</span><a class="mode-o" href="results.html">Admin</a></span>`;
+  }
   function accountNote(cloud) {
     const SB = window.SimLabCloud, web = App.provider === 'web' && SB;
     if (cloud && App.provider === 'web') return `<p class="case">You are signed in to your Sim Lab account. Every run and draft saves to your account, so you can sign in on any device and pick up where you left off. Your scores and grades are visible to the site owner; your answers and drafts are not.</p><div class="actions">${UI.btn('Sign out', 'sb-signout', 'btn-ghost')}</div>`;
     if (cloud) return '<p class="case">You are signed in through your Claude account, with the same Google or email sign-in you use for Claude. Every run, draft and score saves to private storage that only you can read, and you can resume on any device where you open this page.</p>';
     if (App.connecting) return '<p class="case">Connecting to your account…</p>';
-    if (web) return `<p class="case">You are playing as a guest, so runs save in this browser only. Sign in to keep your progress on every device. Runs already on this device can be moved to your account after you sign in.</p><div class="sb-form"><label class="cap" for="sb-email">Email</label><input id="sb-email" class="sb-in" type="email" autocomplete="email" placeholder="you@example.com"><div class="actions">${UI.btn('Email me a sign-in link', 'sb-email', 'btn-primary')}${SB.google ? UI.btn('Continue with Google', 'sb-google', 'btn-ghost') : ''}</div></div>`;
+    if (web) return `<p class="case">You are playing as a guest, so runs save in this browser only. Sign in to keep your progress on every device. Runs already on this device can be moved to your account after you sign in.</p>${signInForm()}`;
     return '<p class="case">This view has no account connection, so runs save in this browser only. Open the page from your Claude account to sync across devices.</p>';
   }
   function viewAccount() {
@@ -657,7 +677,8 @@
     const active = document.activeElement;
     const focusField = active && active.dataset && active.dataset.field && active.tagName === 'INPUT' ? { f: active.dataset.field, s: active.selectionStart, e: active.selectionEnd } : null;
     let html;
-    if (App.view === 'run' && App.cur) html = viewRun();
+    if (needsSignIn()) html = viewSignIn();
+    else if (App.view === 'run' && App.cur) html = viewRun();
     else if (App.view === 'loading') html = shellTop('') + '<main class="main"><div class="empty"><p>Rebuilding your run…</p></div></main>';
     else {
       const v = App.view === 'run' ? 'home' : App.view;
@@ -740,6 +761,8 @@
         window.SimLabCloud.signInEmail(email).then(() => toast('Check your inbox for a sign-in link.'), () => toast('Could not send the link. Try again shortly.')).finally(() => { el.disabled = false; });
         return;
       }
+      case 'sb-retry': location.reload(); return;
+      case 'sb-bypass': App.sbBypass = true; render(true); return;
       case 'sb-hide': App.sbHide = true; render(); return;
       case 'sb-google': window.SimLabCloud.signInGoogle().catch(() => toast('Google sign-in is unavailable right now.')); return;
       case 'sb-signout': window.SimLabCloud.signOut().finally(() => location.reload()); return;

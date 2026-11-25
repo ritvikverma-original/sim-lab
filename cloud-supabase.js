@@ -107,6 +107,7 @@
   window.SimLabCloud = {
     configured,
     google: !!cfg.google,
+    requireSignIn: configured && !!cfg.requireSignIn,
     /* Resolves to { user, db } when signed in, or null for a guest. */
     async start() {
       if (!configured) return null;
@@ -117,9 +118,11 @@
       const me = meOf(session);
       const db = makeDb(me.id);
       db.doc().collection('profile').doc('main').set({ name: me.name, email: me.email, lastSeen: Date.now() }).catch(() => {});
+      let isAdmin = false;
+      try { const { data: adm } = await c.from('simlab_admins').select('user_id').eq('user_id', me.id).maybeSingle(); isAdmin = !!adm; } catch (e) { /* not an admin */ }
       watch(me.id);
       c.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') location.reload(); });
-      return { user: { me: async () => me }, db };
+      return { user: { me: async () => me }, db, isAdmin };
     },
     async signInEmail(email) {
       const c = await getClient();
