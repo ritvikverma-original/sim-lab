@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sim Lab results</title>
+<style>
+:root{--bg:#F6F7FA;--card:#fff;--ink:#141A2A;--mute:#5B6478;--rule:#D2D8E4;--pen:#2F5BEA;--bad:#B42318}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0E1320;--card:#161D2E;--ink:#E8ECF4;--mute:#9AA4B8;--rule:#2A3450;--pen:#7C9BFF;--bad:#F97066}}
+:root[data-theme="dark"]{--bg:#0E1320;--card:#161D2E;--ink:#E8ECF4;--mute:#9AA4B8;--rule:#2A3450;--pen:#7C9BFF;--bad:#F97066}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 12px}
+.mute{color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px;margin-top:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+.kpi{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:12px}.kpi b{display:block;font-size:22px}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap}
+th{font-size:13px;color:var(--mute);font-weight:600}
+td.n,th.n{text-align:right}
+input,select{height:40px;padding:0 10px;border:1px solid var(--rule);border-radius:8px;background:transparent;color:var(--ink);font-size:15px}
+button{height:40px;padding:0 14px;border:0;border-radius:8px;background:var(--pen);color:#fff;font-size:15px;cursor:pointer}
+button.ghost{background:transparent;color:var(--pen);border:1px solid var(--rule)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.err{color:var(--bad)}
+tr.sel td{background:color-mix(in srgb,var(--pen) 10%,transparent)}
+tbody tr[data-u]{cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <h1>Sim Lab results</h1>
+  <p class="mute">Owner view of everyone's scores from the web copies of the app. Answers and drafts are private to each player and are not shown here.</p>
+  <div id="app"><p class="mute">Loading…</p></div>
+</main>
+<script src="cloud-config.js"></script>
+<script>
+(function () {
+  'use strict';
+  const cfg = window.SIMLAB_SUPABASE || {};
+  const LIB = cfg.lib || 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js';
+  const $app = document.getElementById('app');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const when = t => t ? new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '–';
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null;
+  let client, users = [], runs = [], pick = 'all';
+
+  function show(h) { $app.innerHTML = h; }
+  function signInForm(msg) {
+    show(`<div class="card"><h2>Sign in</h2><p class="mute">Use the email of an owner account.</p>${msg ? `<p class="${msg.err ? 'err' : 'mute'}">${esc(msg.t)}</p>` : ''}<div class="row"><input id="em" type="email" autocomplete="email" placeholder="you@example.com"><button id="go">Email me a sign-in link</button></div></div>`);
+    document.getElementById('go').onclick = async () => {
+      const email = document.getElementById('em').value.trim(); if (!email) return;
+      const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+      signInForm(error ? { t: 'Could not send the link: ' + error.message, err: true } : { t: 'Check your inbox for a sign-in link.' });
+    };
+  }
+
+  let loading = false;
+  async function load(session) {
+    if (loading) return; loading = true;
+    const { data: adm } = await client.from('simlab_admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
+    if (!adm) {
+      show(`<div class="card"><p>Signed in as ${esc(session.user.email)}, which is not an owner account.</p><p class="mute">Add it to the simlab_admins table (see supabase/schema.sql), then reload.</p><button class="ghost" id="out">Sign out</button></div>`);
+      document.getElementById('out').onclick = () => client.auth.signOut().then(() => location.reload());
+      return;
+    }
+    const all = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await client.from('simlab_docs').select('user_id, col, id, body, updated_at').in('col', ['runs', 'profile']).order('updated_at', { ascending: false }).range(from, from + 999);
+      if (error) { show(`<div class="card err">Could not load results: ${esc(error.message)}</div>`); return; }
+      all.push(...data); if (data.length < 1000) break;
+    }
+    const prof = {};
+    all.filter(r => r.col === 'profile').forEach(r => { prof[r.user_id] = r.body || {}; });
+    runs = all.filter(r => r.col === 'runs' && r.body).map(r => Object.assign({ user: r.user_id }, r.body));
+    const byU = {};
+    runs.forEach(r => { (byU[r.user] = byU[r.user] || []).push(r); });
+    Object.keys(prof).forEach(u => { byU[u] = byU[u] || []; });
+    users = Object.keys(byU).map(u => {
+      const rs = byU[u], done = rs.filter(r => r.status === 'done'), sc = done.map(r => r.score).filter(s => typeof s === 'number');
+      const p = prof[u] || {};
+      return { id: u, name: p.name || '', email: p.email || u.slice(0, 8), runs: rs.length, done: done.length, avg: avg(sc), best: sc.length ? Math.max(...sc) : null, last: Math.max(p.lastSeen || 0, ...rs.map(r => r.updatedAt || 0)) };
+    }).sort((a, b) => b.last - a.last);
+    render(session);
+  }
+
+  function render(session) {
+    const list = pick === 'all' ? runs : runs.filter(r => r.user === pick);
+    const done = list.filter(r => r.status === 'done'), sc = done.map(r => r.score).filter(s => typeof s === 'number');
+    const byM = {};
+    done.forEach(r => { (byM[r.module] = byM[r.module] || []).push(r.score); });
+    const name = u => { const x = users.find(v => v.id === u); return x ? (x.name || x.email) : u.slice(0, 8); };
+    let h = `<div class="row" style="margin-top:8px"><span class="mute">Signed in as ${esc(session.user.email)}</span><span style="flex:1"></span><button class="ghost" id="csv">Download runs (CSV)</button><button class="ghost" id="out">Sign out</button></div>`;
+    h += `<div class="kpis"><div class="kpi"><span class="mute">Players</span><b>${pick === 'all' ? users.length : 1}</b></div><div class="kpi"><span class="mute">Runs</span><b>${list.length}</b></div><div class="kpi"><span class="mute">Completed</span><b>${done.length}</b></div><div class="kpi"><span class="mute">Average score</span><b>${sc.length ? avg(sc) : '–'}</b></div></div>`;
+    h += `<div class="card"><h2>Players</h2><p class="mute">Click a player to filter. ${pick !== 'all' ? '<button class="ghost" id="clr">Show everyone</button>' : ''}</p><div class="tw"><table><thead><tr><th>Player</th><th>Email</th><th class="n">Runs</th><th class="n">Completed</th><th class="n">Avg score</th><th class="n">Best</th><th>Last active</th></tr></thead><tbody>${users.map(u => `<tr data-u="${esc(u.id)}" class="${u.id === pick ? 'sel' : ''}"><td>${esc(u.name || '–')}</td><td>${esc(u.email)}</td><td class="n">${u.runs}</td><td class="n">${u.done}</td><td class="n">${u.avg == null ? '–' : u.avg}</td><td class="n">${u.best == null ? '–' : u.best}</td><td>${when(u.last)}</td></tr>`).join('') || '<tr><td colspan="7" class="mute">No players yet.</td></tr>'}</tbody></table></div></div>`;
+    h += `<div class="card"><h2>By simulation</h2><div class="tw"><table><thead><tr><th>Simulation</th><th class="n">Completed runs</th><th class="n">Average</th><th class="n">Best</th></tr></thead><tbody>${Object.keys(byM).sort((a, b) => byM[b].length - byM[a].length).map(m => { const s = byM[m].filter(x => typeof x === 'number'); return `<tr><td>${esc(m)}</td><td class="n">${byM[m].length}</td><td class="n">${s.length ? avg(s) : '–'}</td><td class="n">${s.length ? Math.max(...s) : '–'}</td></tr>`; }).join('') || '<tr><td colspan="4" class="mute">No completed runs yet.</td></tr>'}</tbody></table></div></div>`;
+    h += `<div class="card"><h2>Recent runs</h2><div class="tw"><table><thead><tr><th>When</th><th>Player</th><th>Simulation</th><th>Status</th><th class="n">Score</th><th>Grade</th><th>Summary</th></tr></thead><tbody>${list.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 200).map(r => `<tr><td>${when(r.completedAt || r.updatedAt)}</td><td>${esc(name(r.user))}</td><td>${esc(r.module)}</td><td>${esc(r.status || '')}</td><td class="n">${r.score == null ? '–' : esc(r.score)}</td><td>${esc(r.grade || '')}</td><td>${esc(r.line || r.progress || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="mute">No runs yet.</td></tr>'}</tbody></table></div></div>`;
+    show(h);
+    document.getElementById('out').onclick = () => client.auth.signOut().then(() => location.reload());
+    document.getElementById('csv').onclick = () => csv(list, name);
+    const clr = document.getElementById('clr'); if (clr) clr.onclick = () => { pick = 'all'; render(session); };
+    $app.querySelectorAll('tr[data-u]').forEach(tr => { tr.onclick = () => { pick = tr.dataset.u; render(session); }; });
+  }
+
+  function csv(list, name) {
+    const rows = [['Player', 'Simulation', 'Status', 'Score', 'Grade', 'Started', 'Last update', 'Completed', 'Summary']];
+    list.forEach(r => rows.push([name(r.user), r.module, r.status, r.score == null ? '' : r.score, r.grade || '', r.createdAt ? new Date(r.createdAt).toISOString() : '', r.updatedAt ? new Date(r.updatedAt).toISOString() : '', r.completedAt ? new Date(r.completedAt).toISOString() : '', r.line || '']));
+    const text = rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); a.download = 'sim-lab-results.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  if (!cfg.url || !cfg.anonKey) { show('<div class="card">Account storage is not set up yet. Fill in cloud-config.js first.</div>'); return; }
+  const s = document.createElement('script'); s.src = LIB;
+  s.onerror = () => show('<div class="card err">Could not load the sign-in library.</div>');
+  s.onload = async () => {
+    client = window.supabase.createClient(cfg.url, cfg.anonKey);
+    const { data } = await client.auth.getSession();
+    if (data.session) load(data.session); else signInForm();
+    client.auth.onAuthStateChange((ev, ses) => { if (ev === 'SIGNED_IN' && ses) load(ses); });
+  };
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

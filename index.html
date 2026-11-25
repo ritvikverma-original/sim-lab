@@ -154,6 +154,7 @@ input[type=range]{width:100%;margin:0;height:34px;accent-color:var(--pen);backgr
 .numf .nb:active{background:var(--rule-2)}
 .numf .nb:disabled{opacity:.35;cursor:default}
 .nw{flex:1;min-width:0;display:flex;align-items:center;gap:2px;border-inline:1px solid var(--rule-2);padding-inline:6px}
+.sb-form{display:grid;gap:8px;margin-top:12px;max-width:420px}.sb-in{width:100%;box-sizing:border-box;height:44px;padding:0 12px;border:1px solid var(--rule, currentColor);border-radius:8px;background:transparent;color:var(--ink);font-size:16px}
 .ni{flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--ink);font-size:16px;text-align:center;padding:0;outline:none;height:100%}
 .nu{font-size:12px;color:var(--ink-3);flex:none;font-family:var(--f-data)}
 .numf.wide{max-width:260px}
@@ -765,6 +766,8 @@ table.pkg tr.tot th,table.pkg tr.tot td{font-weight:700;color:var(--ink);border-
 
 <div id="app"><main class="main"><div class="empty"><p>Loading Sim Lab…</p></div></main></div>
 
+<script src="cloud-config.js"></script>
+<script src="cloud-supabase.js"></script>
 <script src="core.js"></script>
 <script src="boardroom-engine.js"></script>
 <script src="boardroom.js"></script>
