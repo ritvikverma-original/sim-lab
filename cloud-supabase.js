@@ -6,7 +6,7 @@
   'use strict';
   const cfg = window.SIMLAB_SUPABASE || {};
   const TABLE = 'simlab_docs';
-  const LIB = cfg.lib || 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';
+  const LIB = cfg.lib || 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js';
   const configured = !!(cfg.url && cfg.anonKey);
   let client = null, session = null, channel = null;
   const listeners = new Set();
