@@ -11,6 +11,27 @@
   let client = null, session = null, channel = null;
   const listeners = new Set();
 
+  /* Grab the sign-in result from the address bar right away. The app's screen links
+     rewrite the #hash (to #today etc.) before the sign-in library has loaded, which used
+     to wipe the #access_token that Google and email links send back. */
+  const authReturn = (function () {
+    if (!configured) return null;
+    try {
+      const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+      const q = new URLSearchParams(location.search || '');
+      let r = null;
+      if (h.get('access_token') && h.get('refresh_token')) r = { access_token: h.get('access_token'), refresh_token: h.get('refresh_token') };
+      else if (q.get('code')) r = { code: q.get('code') };
+      else if (h.get('error_description') || q.get('error_description')) r = { error: h.get('error_description') || q.get('error_description') };
+      if (r) {
+        ['code', 'error', 'error_code', 'error_description', 'state'].forEach(k => q.delete(k));
+        const qs = q.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+      }
+      return r;
+    } catch (e) { return null; }
+  })();
+
   function loadLib() {
     if (window.supabase && window.supabase.createClient) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -23,10 +44,20 @@
   function withTimeout(p, ms) {
     return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: 'unavailable', message: 'Timed out' }), ms))]);
   }
-  async function getClient() {
-    if (client) return client;
+  let clientP = null;
+  function getClient() {
+    if (!clientP) clientP = makeClient().catch(e => { clientP = null; throw e; });
+    return clientP;
+  }
+  async function makeClient() {
     await withTimeout(loadLib(), 10000);
-    client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    client = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+    if (authReturn && !authReturn.error) {
+      try {
+        if (authReturn.code) await withTimeout(client.auth.exchangeCodeForSession(authReturn.code), 10000);
+        else await withTimeout(client.auth.setSession({ access_token: authReturn.access_token, refresh_token: authReturn.refresh_token }), 10000);
+      } catch (e) { console.warn('Sign-in could not be completed', e); }
+    }
     return client;
   }
 
@@ -110,6 +141,8 @@
     google: !!cfg.google,
     requireSignIn: configured && !!cfg.requireSignIn,
     /* Resolves to { user, db } when signed in, or null for a guest. */
+    /* Set when a sign-in came back with an error, for example a cancelled Google screen. */
+    returnError: authReturn && authReturn.error ? authReturn.error : null,
     async start() {
       if (!configured) return null;
       const c = await getClient();
