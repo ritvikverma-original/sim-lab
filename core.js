@@ -378,7 +378,7 @@
       try { [user, db] = await Promise.all([window.claude.use('user'), window.claude.use('db')]); } catch (e) { /* fall back to device storage */ }
     } else {
       App.provider = 'web';
-      try { const p = await SB.start(); if (p) { user = p.user; db = p.db; App.isAdmin = !!p.isAdmin; } } catch (e) { App.sbDown = true; App.banner = 'Sign-in is unavailable right now, so progress is saved on this device.'; }
+      try { const p = await SB.start(); if (p) { user = p.user; db = p.db; App.isAdmin = !!p.isAdmin; } else if (SB.returnError) { App.banner = 'Sign-in did not finish: ' + SB.returnError + '. Please try again.'; } } catch (e) { App.sbDown = true; App.banner = 'Sign-in is unavailable right now, so progress is saved on this device.'; }
     }
     if (user) {
       try { const me = await user.me(); App.me = { id: me.id, name: me.name || '', email: me.email || null, avatar: me.avatarUrl || null, color: me.color || null }; } catch (e) { /* no identity */ }
