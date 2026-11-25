@@ -34,6 +34,7 @@
   function mapErr(e) {
     if (!e) return { code: 'unknown' };
     const msg = String(e.message || '');
+    if (e.status === 429 || /rate limit/i.test(msg) || e.code === 'over_email_send_rate_limit') return { code: 'rate_limited', message: msg };
     if (e.code === '42501' || /row-level security/i.test(msg)) return { code: 'not_granted', message: msg };
     if (e.code === 'PGRST301' || /JWT|token/i.test(msg)) return { code: 'revoked', message: msg };
     if (/fetch|network|Failed to fetch|timeout/i.test(msg) || e.code === '') return { code: 'unavailable', message: msg };

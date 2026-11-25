@@ -52,7 +52,8 @@ tbody tr[data-u]{cursor:pointer}
 
   function show(h) { $app.innerHTML = h; }
   function signInForm(msg) {
-    show(`<div class="card"><h2>Sign in</h2><p class="mute">Use the email of an owner account.</p>${msg ? `<p class="${msg.err ? 'err' : 'mute'}">${esc(msg.t)}</p>` : ''}<div class="row"><input id="em" type="email" autocomplete="email" placeholder="you@example.com"><button id="go">Email me a sign-in link</button></div></div>`);
+    show(`<div class="card"><h2>Sign in</h2><p class="mute">Use the email of an owner account.</p>${msg ? `<p class="${msg.err ? 'err' : 'mute'}">${esc(msg.t)}</p>` : ''}${cfg.google ? '<div class="row" style="margin-bottom:10px"><button id="gg">Continue with Google</button></div>' : ''}<div class="row"><input id="em" type="email" autocomplete="email" placeholder="you@example.com"><button id="go">Email me a sign-in link</button></div></div>`);
+    const gg = document.getElementById('gg'); if (gg) gg.onclick = () => client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
     document.getElementById('go').onclick = async () => {
       const email = document.getElementById('em').value.trim(); if (!email) return;
       const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
